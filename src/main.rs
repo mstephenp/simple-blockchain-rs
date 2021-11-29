@@ -2,6 +2,7 @@ use block::Block;
 
 mod app;
 mod block;
+mod p2p;
 mod util;
 
 fn main() {
