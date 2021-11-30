@@ -1,6 +1,8 @@
-use libp2p::futures::StreamExt;
+use std::time::Duration;
+
 use libp2p::{
     core::transport::upgrade,
+    futures::StreamExt,
     mplex::MplexConfig,
     noise::{Keypair, NoiseConfig, X25519Spec},
     swarm::SwarmBuilder,
@@ -12,6 +14,7 @@ use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
     sync::mpsc,
+    time::sleep,
 };
 
 use crate::app::App;
@@ -26,7 +29,7 @@ async fn main() {
     pretty_env_logger::init();
 
     info!("Peer id {}", p2p::PEER_ID.clone());
-    let (response_sender, mut response_rcvr) = mpsc::unbounded_channel();
+    let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
 
     let auth_keys = Keypair::<X25519Spec>::new()
@@ -58,7 +61,7 @@ async fn main() {
     .expect("swarm can be started");
 
     spawn(async move {
-        // sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(1)).await;
         info!("sending init event");
         init_sender.send(true).expect("can send init event");
     });
@@ -66,16 +69,51 @@ async fn main() {
     loop {
         let evt = {
             select! {
-                line = stdin.next_line() => Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
-                response = response_rcvr.recv() => {
+                line = stdin.next_line() => {
+                    Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin")))
+                },
+                response = response_rcv.recv() => {
                     Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
                 },
                 _init = init_rcv.recv() => {
                     Some(p2p::EventType::Init)
                 },
                 event = swarm.select_next_some() => {
-                    info!("unhandled swarm event: {:?}", event);
-                    None
+                    match event {
+
+                        // libp2p::swarm::SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => todo!(),
+                        // libp2p::swarm::SwarmEvent::BannedPeer { peer_id, endpoint } => todo!(),
+                        // libp2p::swarm::SwarmEvent::UnreachableAddr { peer_id, address, error, attempts_remaining } => todo!(),
+                        // libp2p::swarm::SwarmEvent::UnknownPeerUnreachableAddr { address, error } => todo!(),
+                        // libp2p::swarm::SwarmEvent::NewListenAddr { listener_id, address } => todo!(),
+                        // libp2p::swarm::SwarmEvent::ExpiredListenAddr { listener_id, address } => todo!(),
+                        // libp2p::swarm::SwarmEvent::ListenerClosed { listener_id, addresses, reason } => todo!(),
+                        // libp2p::swarm::SwarmEvent::ListenerError { listener_id, error } => todo!(),
+                        libp2p::swarm::SwarmEvent::IncomingConnection { local_addr, send_back_addr } => {
+                            info!("Incoming Connection: local_addr {:?}, send_back_addr {:?}",
+                                local_addr, send_back_addr);
+                            None
+                        },
+                        libp2p::swarm::SwarmEvent::Dialing(peer_id) => {
+                            info!("Dialing peer_id: {:?}", peer_id);
+                            None
+                        },
+                        libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established } => {
+                            info!("Connection ESTABLISHED: peer_id {:?}, endpoint {:?}, num_established {:?}",
+                                peer_id, endpoint, num_established);
+                            None
+                        },
+                        libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, endpoint, num_established, cause } => {
+                            info!("Connection CLOSED: peer_id {:?}, endpoint {:?}, num_established {:?}, cause {:?}",
+                                peer_id, endpoint, num_established, cause);
+                            None
+                        },
+
+                        _ => {
+                            info!("Event not handled {:?}", event);
+                            None
+                        }
+                    }
                 },
             }
         };

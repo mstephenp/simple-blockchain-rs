@@ -71,7 +71,7 @@ pub fn get_list_peers(swarm: &Swarm<AppBehavior>) -> Vec<String> {
     for peer in nodes {
         unique_peers.insert(peer);
     }
-    unique_peers.iter().map(|p| p.to_string()).collect()
+    unique_peers.iter().map(|&p| p.to_string()).collect()
 }
 
 pub fn handle_print_peers(swarm: &Swarm<AppBehavior>) {
